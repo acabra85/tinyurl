@@ -18,9 +18,11 @@ public class Controller {
     public TinyUrlCreateResponse handleCreateUrl(
             String originalUrl, LocalDateTime expiration, int userId
     ) {
+        final LocalDateTime timestamp = LocalDateTime.now();
         return this.urlService.createUrl(
                 originalUrl,
-                expiration == null ? LocalDateTime.now() : expiration,
+                timestamp,
+                expiration,
                 userId);
     }
 

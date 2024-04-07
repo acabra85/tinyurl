@@ -8,6 +8,7 @@ import com.acabra.response.TinyUrlProcessUrlResponse;
 import org.ehcache.Cache;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 public class TinyUrlService {
 
@@ -21,13 +22,12 @@ public class TinyUrlService {
         this.cache = cm;
     }
 
-    public TinyUrlCreateResponse createUrl(String originalUrl, LocalDateTime expiration, int userId) {
+    public TinyUrlCreateResponse createUrl(String originalUrl, LocalDateTime created, LocalDateTime expiration, int userId) {
         String key = kgs.getNextKey();
         while (db.hasKey(key)) {
             key = kgs.getNextKey();
         }
-        LocalDateTime created = LocalDateTime.now();
-        LocalDateTime validExpiration = getOrDefaultExpiration(expiration);
+        LocalDateTime validExpiration = getOrDefaultExpiration(created, expiration);
         if (db.insertKey(key, originalUrl, created, validExpiration, userId)) {
             cache.put(key, new UrlData(key, originalUrl, userId, created, expiration));
             return TinyUrlCreateResponse.ok(key);
@@ -35,9 +35,9 @@ public class TinyUrlService {
         return TinyUrlCreateResponse.fail();
     }
 
-    private LocalDateTime getOrDefaultExpiration(LocalDateTime expiration) {
-        if (expiration == null || expiration.isBefore(LocalDateTime.now())) {
-            return LocalDateTime.now().plusDays(30);
+    private LocalDateTime getOrDefaultExpiration(LocalDateTime now, LocalDateTime expiration) {
+        if (expiration == null || expiration.isBefore(now)) {
+            return now.plusDays(30);
         }
         return expiration;
     }
@@ -50,11 +50,11 @@ public class TinyUrlService {
                 return new TinyUrlProcessUrlResponse(ProcessResponseType.NOT_FOUND, urlKey, null);
             }
         }
-        final ProcessResponseType type =
-                urlData.expires().isBefore(LocalDateTime.now())
-                        ? ProcessResponseType.EXPIRED
-                        : ProcessResponseType.VALID;
-        return new TinyUrlProcessUrlResponse(type, urlKey, urlData.url());
+        final LocalDateTime now = LocalDateTime.now(ZoneId.systemDefault());
+        if (urlData.expires().isBefore(now)) {
+            return new TinyUrlProcessUrlResponse(ProcessResponseType.EXPIRED, urlKey, null);
+        }
+        return new TinyUrlProcessUrlResponse(ProcessResponseType.VALID, urlKey, urlData.url());
     }
 
     public TinyUrlDeleteResponse deleteUrl() {

@@ -12,21 +12,22 @@ import org.ehcache.config.builders.CacheManagerBuilder;
 import org.ehcache.config.builders.ExpiryPolicyBuilder;
 import org.ehcache.config.builders.ResourcePoolsBuilder;
 import org.ehcache.expiry.ExpiryPolicy;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.function.Supplier;
 
 class TinyUrlServiceTest {
 
     private TinyUrlService underTest;
+    private TinyUrlDBService db;
 
     @BeforeEach
     public void setUp() throws Exception {
-        TinyUrlDBService db = new TinyUrlDBService();
+        this.db = new TinyUrlDBService();
         KeyGenerationService kgs = new KeyGenerationService(6);
         ExpiryPolicy<? super String, ? super UrlData> expiryPolicy =
                 (ExpiryPolicyBuilder.timeToLiveExpiration(Duration.ofMillis(200)));
@@ -48,17 +49,46 @@ class TinyUrlServiceTest {
                                         ).withExpiry(expiryPolicy).build());
         this.underTest = new TinyUrlService(db,kgs, urlCache);
     }
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        this.db.close();
+    }
+
     @Test
-    public void shouldCreateANewKey() {
+    public void shouldRedirect_validKey() {
         final String expectedURL = "myUrl";
 
+        final LocalDateTime now = LocalDateTime.now();
         final TinyUrlCreateResponse resp = this.underTest.createUrl(
-                expectedURL, LocalDateTime.now().plus(30, ChronoUnit.DAYS), 1);
+                expectedURL, now, now.plus(30, ChronoUnit.DAYS), 1);
         Assertions.assertThat(resp.created()).isTrue();
         Assertions.assertThat(resp.key()).hasSize(6);
 
         final TinyUrlProcessUrlResponse actual = this.underTest.processUrl(resp.key());
         Assertions.assertThat(actual.type()).isEqualTo(ProcessResponseType.VALID);
         Assertions.assertThat(actual.redirectTo()).isEqualTo(expectedURL);
+    }
+
+    @Test
+    public void noRedirection_keyExpired() {
+        final String expectedURL = "myUrl";
+
+        final LocalDateTime now = LocalDateTime.now();
+        final TinyUrlCreateResponse resp = this.underTest.createUrl(
+                expectedURL, now, now.plus(10, ChronoUnit.NANOS), 1);
+        Assertions.assertThat(resp.created()).isTrue();
+        Assertions.assertThat(resp.key()).hasSize(6);
+
+        final TinyUrlProcessUrlResponse actual = this.underTest.processUrl(resp.key());
+        Assertions.assertThat(actual.type()).isEqualTo(ProcessResponseType.EXPIRED);
+        Assertions.assertThat(actual.redirectTo()).isNull();
+    }
+
+    @Test
+    public void noRedirection_notFound() {
+        final TinyUrlProcessUrlResponse actual = this.underTest.processUrl("nonExistentKey");
+        Assertions.assertThat(actual.type()).isEqualTo(ProcessResponseType.NOT_FOUND);
+        Assertions.assertThat(actual.redirectTo()).isNull();
     }
 }

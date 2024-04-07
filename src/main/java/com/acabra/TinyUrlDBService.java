@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 
 public class TinyUrlDBService {
@@ -31,7 +32,7 @@ public class TinyUrlDBService {
                         user_id INT NOT NULL, 
                         url VARCHAR(255) NOT NULL, 
                         created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, 
-                        expiration DATE NOT NULL,
+                        expiration TIMESTAMP NULL,
                         PRIMARY KEY (pkey)
                 );
                 """
@@ -54,11 +55,13 @@ public class TinyUrlDBService {
                     VALUES (?,?,?,?, ?)
                     """
             );
+            final OffsetDateTime createdOffset = created.atOffset(ZoneOffset.UTC);
+            final OffsetDateTime expireOffset = validExpiration.atOffset(ZoneOffset.UTC);
             statement.setObject(1, key);
             statement.setObject(2, userId);
             statement.setString(3, url);
-            statement.setObject(4, created.atOffset(ZoneOffset.UTC));
-            statement.setObject(5, validExpiration.atOffset(ZoneOffset.UTC));
+            statement.setObject(4, createdOffset);
+            statement.setObject(5, expireOffset);
             statement.execute();
             return true;
         } catch (Exception e) {
@@ -90,14 +93,28 @@ public class TinyUrlDBService {
                         resultSet.getString(1),
                         resultSet.getString(3),
                         resultSet.getInt(2),
-                        resultSet.getObject(4, OffsetDateTime.class).toLocalDateTime(),
-                        resultSet.getObject(5, OffsetDateTime.class).toLocalDateTime()
+                        toLocalDateTime(resultSet
+                                .getObject(4, OffsetDateTime.class)),
+                        toLocalDateTime(resultSet
+                                .getObject(5, OffsetDateTime.class))
                 );
             }
             return null;
         } catch (SQLException sqlException) {
             sqlException.printStackTrace();
             return null;
+        }
+    }
+
+    private LocalDateTime toLocalDateTime(OffsetDateTime offset) {
+        return offset.atZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+    }
+
+    public void close() {
+        try {
+            this.db.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
     }
 }
