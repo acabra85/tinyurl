@@ -30,7 +30,7 @@ class TinyUrlServiceTest {
         this.db = new TinyUrlDBService();
         KeyGenerationService kgs = new KeyGenerationService(6);
         ExpiryPolicy<? super String, ? super UrlData> expiryPolicy =
-                (ExpiryPolicyBuilder.timeToLiveExpiration(Duration.ofMillis(200)));
+                (ExpiryPolicyBuilder.timeToLiveExpiration(Duration.ofMillis(50)));
         final CacheManager preConfigured = CacheManagerBuilder.newCacheManagerBuilder()
                 .withCache("preConfigured",
                         CacheConfigurationBuilder.newCacheConfigurationBuilder(
